@@ -26,3 +26,5 @@ keep updating the database commands I can use to DATABASE.md
 ```
 ok, I'll build an admin page on the web to upload the pdfs but create a route for that. I'll upload different pdfs that are prefixed in a certain way to denote which section it is. S0 will be everything before that
 ```
+
+
