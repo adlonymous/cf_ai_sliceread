@@ -33,6 +33,10 @@
 		{
 			"tag": "v6",
 			"up": "./migrations/0005_clear_mock_data.sql"
+		},
+		{
+			"tag": "v7",
+			"up": "./migrations/0006_add_r2_storage.sql"
 		}
 	],
 	"durable_objects": {
@@ -47,12 +51,21 @@
 		"enabled": true
 	},
 	"d1_databases": [
-    {
-      "binding": "fractional_document_unlock",
-      "database_name": "fractional-document-unlock",
-      "database_id": "65b1e75f-a5bc-48d9-a89e-5eb2d2026850"
-    }
-  ]
+		{
+			"binding": "fractional_document_unlock",
+			"database_name": "fractional-document-unlock",
+			"database_id": "65b1e75f-a5bc-48d9-a89e-5eb2d2026850"
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "PDF_STORAGE",
+			"bucket_name": "fractional-document-pdfs"
+		}
+	],
+	"ai": {
+		"binding": "AI"
+	}
 	/**
 	 * Smart Placement
 	 * Docs: https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement

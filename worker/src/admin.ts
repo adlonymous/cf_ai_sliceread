@@ -1,5 +1,7 @@
 import type { Env } from "./types";
 import { corsHeaders } from "./routes";
+import { R2Utils } from "./r2-utils";
+import { StorageOptimizer } from "./storage-optimizer";
 
 /**
  * Handle admin PDF upload endpoint
@@ -50,39 +52,41 @@ export async function handleAdminUpload(request: Request, env: Env): Promise<Res
 
 		const textbookId = (textbookResult as any).id;
 
-		// Check file size (D1 has a ~1MB limit for BLOB storage)
+		// Check file size and determine storage method
 		const arrayBuffer = await file.arrayBuffer();
 		const sizeBytes = arrayBuffer.byteLength;
 		
 		// D1 BLOB size limit is approximately 1MB
 		const MAX_BLOB_SIZE = 1024 * 1024; // 1MB
 		
-		if (sizeBytes > MAX_BLOB_SIZE) {
-			return new Response(JSON.stringify({
-				error: 'File too large',
-				message: `File size (${(sizeBytes / 1024 / 1024).toFixed(2)}MB) exceeds the 1MB limit for direct storage. Please use a smaller file or implement external storage (R2).`,
-				maxSize: MAX_BLOB_SIZE,
-				actualSize: sizeBytes
-			}), {
-				status: 413, // Payload Too Large
-				headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-			});
-		}
-
-		// Convert file to base64 for small files
-		const uint8Array = new Uint8Array(arrayBuffer);
-		let binary = '';
-		for (let i = 0; i < uint8Array.length; i++) {
-			binary += String.fromCharCode(uint8Array[i]);
-		}
-		const base64 = btoa(binary);
+		// Generate resource ID
+		const resourceId = `${textbookSlug}-${sectionNumber.toString().padStart(3, '0')}`;
+		
+		// Calculate SHA256 hash
 		const sha256 = await crypto.subtle.digest('SHA-256', arrayBuffer);
 		const sha256Hex = Array.from(new Uint8Array(sha256))
 			.map(b => b.toString(16).padStart(2, '0'))
 			.join('');
 
-		// Generate resource ID
-		const resourceId = `${textbookSlug}-${sectionNumber.toString().padStart(3, '0')}`;
+		let pdfBlob: string | null = null;
+		let r2Key: string | null = null;
+		let r2Url: string | null = null;
+
+		if (sizeBytes <= MAX_BLOB_SIZE) {
+			// Store in D1 as base64 for small files
+			const uint8Array = new Uint8Array(arrayBuffer);
+			let binary = '';
+			for (let i = 0; i < uint8Array.length; i++) {
+				binary += String.fromCharCode(uint8Array[i]);
+			}
+			pdfBlob = btoa(binary);
+		} else {
+			// Store in R2 for larger files
+			const r2Utils = new R2Utils(env);
+			const r2Result = await r2Utils.uploadPDF(file, resourceId, textbookSlug);
+			r2Key = r2Result.r2Key;
+			r2Url = r2Result.r2Url;
+		}
 
 		// Insert or update section
 		await db.prepare(`
@@ -92,6 +96,8 @@ export async function handleAdminUpload(request: Request, env: Env): Promise<Res
 				resource_id,
 				title,
 				pdf_blob,
+				r2_key,
+				r2_url,
 				currency_code,
 				price_minor_units,
 				mime_type,
@@ -99,13 +105,15 @@ export async function handleAdminUpload(request: Request, env: Env): Promise<Res
 				sha256,
 				summary,
 				keywords
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`).bind(
 			textbookId,
 			sectionNumber,
 			resourceId,
 			title,
-			base64,
+			pdfBlob,
+			r2Key,
+			r2Url,
 			currencyCode,
 			priceMinorUnits,
 			'application/pdf',
@@ -130,7 +138,9 @@ export async function handleAdminUpload(request: Request, env: Env): Promise<Res
 				size_bytes: sizeBytes,
 				sha256: sha256Hex,
 				price_minor_units: priceMinorUnits,
-				currency_code: currencyCode
+				currency_code: currencyCode,
+				storage_method: pdfBlob ? 'd1_blob' : 'r2_bucket',
+				r2_url: r2Url
 			}
 		}), {
 			headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -269,6 +279,182 @@ export async function handleAdminListSections(request: Request, env: Env): Promi
 		console.error('List sections error:', error);
 		return new Response(JSON.stringify({
 			error: 'Failed to list sections',
+			message: error instanceof Error ? error.message : 'Unknown error'
+		}), {
+			status: 500,
+			headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+		});
+	}
+}
+
+/**
+ * Handle admin migration of PDFs from D1 to R2
+ */
+export async function handleAdminMigrateToR2(request: Request, env: Env): Promise<Response> {
+	try {
+		const db = env.fractional_document_unlock;
+		const r2Utils = new R2Utils(env);
+		
+		// Get all sections with PDF blobs that don't have R2 keys
+		const sections = await db.prepare(`
+			SELECT id, resource_id, pdf_blob, textbook_id, title
+			FROM sections 
+			WHERE pdf_blob IS NOT NULL AND r2_key IS NULL
+		`).all();
+
+		const results = [];
+		
+		for (const section of sections.results as any[]) {
+			try {
+				// Convert base64 back to ArrayBuffer
+				const binaryString = atob(section.pdf_blob);
+				const bytes = new Uint8Array(binaryString.length);
+				for (let i = 0; i < binaryString.length; i++) {
+					bytes[i] = binaryString.charCodeAt(i);
+				}
+				
+				// Create a File-like object for R2 upload
+				const file = new File([bytes], `${section.resource_id}.pdf`, { type: 'application/pdf' });
+				
+				// Get textbook slug for R2 key generation
+				const textbook = await db.prepare(
+					'SELECT slug FROM textbooks WHERE id = ?'
+				).bind(section.textbook_id).first();
+				
+				if (!textbook) {
+					results.push({
+						resource_id: section.resource_id,
+						status: 'error',
+						message: 'Textbook not found'
+					});
+					continue;
+				}
+				
+				// Upload to R2
+				const r2Result = await r2Utils.uploadPDF(file, section.resource_id, (textbook as any).slug);
+				
+				// Update section with R2 info
+				await db.prepare(`
+					UPDATE sections 
+					SET r2_key = ?, r2_url = ?, pdf_blob = NULL
+					WHERE id = ?
+				`).bind(r2Result.r2Key, r2Result.r2Url, section.id).run();
+				
+				results.push({
+					resource_id: section.resource_id,
+					status: 'success',
+					r2_key: r2Result.r2Key,
+					r2_url: r2Result.r2Url
+				});
+				
+			} catch (error) {
+				results.push({
+					resource_id: section.resource_id,
+					status: 'error',
+					message: error instanceof Error ? error.message : 'Unknown error'
+				});
+			}
+		}
+		
+		return new Response(JSON.stringify({
+			success: true,
+			migrated_count: results.filter(r => r.status === 'success').length,
+			error_count: results.filter(r => r.status === 'error').length,
+			results
+		}), {
+			headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+		});
+		
+	} catch (error) {
+		console.error('Migration error:', error);
+		return new Response(JSON.stringify({
+			error: 'Migration failed',
+			message: error instanceof Error ? error.message : 'Unknown error'
+		}), {
+			status: 500,
+			headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+		});
+	}
+}
+
+/**
+ * Handle admin storage analysis
+ */
+export async function handleAdminStorageAnalysis(request: Request, env: Env): Promise<Response> {
+	try {
+		const optimizer = new StorageOptimizer(env);
+		const analysis = await optimizer.analyzeStorage();
+		const breakdown = await optimizer.getStorageBreakdown();
+
+		return new Response(JSON.stringify({
+			success: true,
+			analysis,
+			breakdown
+		}), {
+			headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+		});
+
+	} catch (error) {
+		console.error('Storage analysis error:', error);
+		return new Response(JSON.stringify({
+			error: 'Storage analysis failed',
+			message: error instanceof Error ? error.message : 'Unknown error'
+		}), {
+			status: 500,
+			headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+		});
+	}
+}
+
+/**
+ * Handle admin storage optimization
+ */
+export async function handleAdminOptimizeStorage(request: Request, env: Env): Promise<Response> {
+	try {
+		const url = new URL(request.url);
+		const thresholdMB = parseFloat(url.searchParams.get('threshold') || '0.5');
+		
+		const optimizer = new StorageOptimizer(env);
+		const result = await optimizer.optimizeStorage(thresholdMB);
+
+		return new Response(JSON.stringify({
+			success: true,
+			...result
+		}), {
+			headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+		});
+
+	} catch (error) {
+		console.error('Storage optimization error:', error);
+		return new Response(JSON.stringify({
+			error: 'Storage optimization failed',
+			message: error instanceof Error ? error.message : 'Unknown error'
+		}), {
+			status: 500,
+			headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+		});
+	}
+}
+
+/**
+ * Handle admin cleanup of orphaned R2 objects
+ */
+export async function handleAdminCleanupOrphaned(request: Request, env: Env): Promise<Response> {
+	try {
+		const optimizer = new StorageOptimizer(env);
+		const result = await optimizer.cleanupOrphanedR2Objects();
+
+		return new Response(JSON.stringify({
+			success: true,
+			...result
+		}), {
+			headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+		});
+
+	} catch (error) {
+		console.error('Cleanup error:', error);
+		return new Response(JSON.stringify({
+			error: 'Cleanup failed',
 			message: error instanceof Error ? error.message : 'Unknown error'
 		}), {
 			status: 500,

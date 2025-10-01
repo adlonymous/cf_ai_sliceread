@@ -2,6 +2,9 @@
 export interface Env {
 	MY_DURABLE_OBJECT: DurableObjectNamespace;
 	fractional_document_unlock: D1Database;
+	PDF_STORAGE: R2Bucket;
+	AI: Ai;
+	AI_SEARCH_API_TOKEN: string;
 }
 
 export interface Textbook {
@@ -21,8 +24,10 @@ export interface Section {
 	section_number: number;
 	resource_id: string;
 	title: string;
-	pdf_blob?: ArrayBuffer;
+	pdf_blob?: string; // Base64 encoded string
 	external_key?: string;
+	r2_key?: string;
+	r2_url?: string;
 	currency_code: string;
 	price_minor_units: number;
 	mime_type: string;

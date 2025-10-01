@@ -46,32 +46,46 @@ export class MyDurableObject extends DurableObject<Env> {
 	}
 
 	/**
-	 * Get section PDF content (blob or external reference)
+	 * Get section PDF content (blob, R2, or external reference)
 	 */
-	async getSectionContent(resourceId: string): Promise<{ content?: ArrayBuffer; external_key?: string; mime_type: string }> {
+	async getSectionContent(resourceId: string): Promise<{ content?: ArrayBuffer; external_key?: string; r2_url?: string; mime_type: string }> {
 		const section = await this.getSection(resourceId);
+		console.log('Section found:', !!section);
+		console.log('Section pdf_blob exists:', !!section?.pdf_blob);
+		console.log('Section mime_type:', section?.mime_type);
+		
 		if (!section) {
 			throw new Error('Section not found');
 		}
 
 		if (section.pdf_blob) {
+			console.log('Processing PDF blob, length:', section.pdf_blob.length);
 			// Convert base64 string back to ArrayBuffer
-			const binaryString = atob(section.pdf_blob);
+			const binaryString = atob(section.pdf_blob as string);
 			const bytes = new Uint8Array(binaryString.length);
 			for (let i = 0; i < binaryString.length; i++) {
 				bytes[i] = binaryString.charCodeAt(i);
 			}
 			
+			console.log('Returning PDF content, ArrayBuffer length:', bytes.buffer.byteLength);
 			return {
 				content: bytes.buffer,
 				mime_type: section.mime_type
 			};
+		} else if (section.r2_url) {
+			console.log('Returning R2 URL');
+			return {
+				r2_url: section.r2_url,
+				mime_type: section.mime_type
+			};
 		} else if (section.external_key) {
+			console.log('Returning external key');
 			return {
 				external_key: section.external_key,
 				mime_type: section.mime_type
 			};
 		} else {
+			console.log('No content available');
 			throw new Error('No content available for this section');
 		}
 	}

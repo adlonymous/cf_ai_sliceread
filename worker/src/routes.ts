@@ -104,8 +104,14 @@ export async function handleSectionContent(request: Request, env: Env): Promise<
 
 	try {
 		const content = await stub.getSectionContent(resourceId);
+		console.log('Routes - Content type:', typeof content.content);
+		console.log('Routes - Content exists:', !!content.content);
+		console.log('Routes - MIME type:', content.mime_type);
+		console.log('Routes - Content constructor:', content.content?.constructor?.name);
+		console.log('Routes - Content length:', content.content?.byteLength);
 		
 		if (content.content) {
+			console.log('Routes - Taking PDF path, returning PDF content directly');
 			// Return PDF blob
 			return new Response(content.content, {
 				headers: {
@@ -114,6 +120,15 @@ export async function handleSectionContent(request: Request, env: Env): Promise<
 					'Content-Disposition': `inline; filename="${resourceId}.pdf"`,
 					'Cache-Control': 'public, max-age=3600'
 				}
+			});
+		} else if (content.r2_url) {
+			console.log('Routes - Returning R2 URL');
+			// Return R2 URL for client to fetch from R2 storage
+			return new Response(JSON.stringify({ 
+				r2_url: content.r2_url,
+				mime_type: content.mime_type
+			}), {
+				headers: { ...corsHeaders, 'Content-Type': 'application/json' }
 			});
 		} else if (content.external_key) {
 			// Return external key for client to fetch from storage
@@ -261,11 +276,20 @@ export async function handleDefault(): Promise<Response> {
 			'GET /textbook/:slug - Get textbook info',
 			'GET /textbook/:slug/sections - Get all sections in textbook',
 			'',
+			'AI Search Endpoints:',
+			'GET /ai/search?q=query&textbook=slug - Search PDF content using AI',
+			'POST /ai/chat - Chat with AI about textbook content',
+			'GET /ai/pdf/:resource_id - Get PDF access information',
+			'',
 			'Admin Endpoints:',
 			'POST /admin/upload - Upload PDF (filename: {section_number}_{title}.pdf)',
 			'POST /admin/textbooks - Create new textbook',
 			'GET /admin/textbooks - List all textbooks',
-			'GET /admin/textbooks/:slug/sections - List sections for textbook'
+			'GET /admin/textbooks/:slug/sections - List sections for textbook',
+			'POST /admin/migrate-to-r2 - Migrate existing PDFs from D1 to R2',
+			'GET /admin/storage-analysis - Analyze storage usage',
+			'POST /admin/optimize-storage?threshold=0.5 - Optimize storage (migrate large files)',
+			'POST /admin/cleanup-orphaned - Clean up orphaned R2 objects'
 		]
 	}), {
 		headers: { ...corsHeaders, 'Content-Type': 'application/json' }

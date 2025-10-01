@@ -1,167 +1,64 @@
-# Cerebras Document Chatbot
+# SliceRead - Smart Learning Assistant
 
-A Next.js application that provides document-specific chat functionality using the Cerebras AI API. Users can select documents and have intelligent conversations about their content.
+A modern web application that allows users to interact with textbooks through an AI-powered chatbot interface. Users can ask questions about textbook content and get intelligent answers with instant access to relevant sections.
 
 ## Features
 
-- **Document-Specific Chat Sessions**: Each document has its own isolated chat session
-- **Cerebras AI Integration**: Powered by Cerebras' fast inference capabilities
-- **Real-time Chat Interface**: Modern, responsive chat UI with message history
-- **Document Management**: Browse and select from available documents
-- **Session Persistence**: Chat history is maintained during the session
-- **Database Integration**: Can connect to your existing document database
+- **Modern UI/UX**: Beautiful, responsive design with glassmorphism effects and smooth animations
+- **Textbook Grid**: Browse available textbooks in an elegant card layout
+- **AI Chatbot**: Ask questions in natural language and get intelligent responses
+- **PDF Viewer**: View relevant textbook sections instantly with integrated PDF viewer
+- **Smart Search**: AI-powered search across textbook content
+- **Responsive Design**: Works seamlessly on desktop and mobile devices
 
-## Prerequisites
+## Tech Stack
 
-- Node.js 18+ 
-- A Cerebras API key
-- (Optional) Your document database running
+- **Frontend**: Next.js 15, React 19, TypeScript
+- **Styling**: Tailwind CSS with custom components
+- **Animations**: Framer Motion
+- **Icons**: Lucide React
+- **PDF Viewing**: React PDF, PDF.js
+- **Backend Integration**: Custom API proxy for worker communication
 
-## Setup
+## Getting Started
 
-1. **Install Dependencies**
+1. Install dependencies:
    ```bash
-   npm install
+   npm install --legacy-peer-deps
    ```
 
-2. **Configure Environment Variables**
-   
-   Create a `.env.local` file in the web directory:
-   ```env
-   CEREBRAS_API_KEY=your_cerebras_api_key_here
-   NEXT_PUBLIC_WORKER_API=http://localhost:8787
-   ```
-
-3. **Start the Development Server**
+2. Start the development server:
    ```bash
    npm run dev
    ```
 
-4. **Open the Application**
-   
-   Navigate to `http://localhost:3000` in your browser.
+3. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-## Usage
+## API Integration
 
-### Basic Chat Flow
+The app integrates with the worker API through a proxy route (`/api/proxy`) to handle CORS and provide a seamless experience. Make sure the worker is running on `http://localhost:8787` for full functionality.
 
-1. **Select a Document**: Choose from the available documents in the left sidebar
-2. **Start Chatting**: Type your questions in the input field at the bottom
-3. **View Responses**: The AI will respond based on the document content
-4. **Clear Session**: Use the "Clear Chat" button to start a new conversation
+## Pages
 
-### API Endpoints
+- **Home** (`/`): Textbook grid with modern card layout
+- **Textbook Chat** (`/textbook/[slug]`): AI chatbot interface with PDF viewer
+- **API Proxy** (`/api/proxy`): Handles communication with worker API
 
-#### Chat API (`/api/chat`)
+## Components
 
-- **POST**: Send a message to the chatbot
-  ```json
-  {
-    "message": "What is this document about?",
-    "documentId": "document-123",
-    "sessionId": "session-456"
-  }
-  ```
+- **PDF Viewer Modal**: Full-featured PDF viewer with zoom, navigation, and responsive design
+- **Chat Interface**: Modern chat bubbles with AI responses and section references
+- **Textbook Cards**: Animated cards with hover effects and smooth transitions
 
-- **GET**: Retrieve chat history
-  ```
-  GET /api/chat?documentId=document-123&sessionId=session-456
-  ```
+## Styling
 
-- **DELETE**: Clear chat session
-  ```
-  DELETE /api/chat?documentId=document-123&sessionId=session-456
-  ```
+The app uses a custom design system with:
+- Glassmorphism effects
+- Gradient backgrounds and text
+- Smooth animations and transitions
+- Responsive grid layouts
+- Modern typography (Inter, Nunito)
 
-#### Documents API (`/api/documents`)
+## Development
 
-- **GET**: Retrieve available documents
-  ```
-  GET /api/documents?textbook=blockchain&search=consensus
-  ```
-
-## Architecture
-
-### Frontend Components
-
-- **`/app/page.tsx`**: Landing page with feature overview
-- **`/app/chat/page.tsx`**: Main chat interface
-- **`/app/layout.tsx`**: Navigation and layout wrapper
-
-### API Routes
-
-- **`/app/api/chat/route.ts`**: Chat functionality and session management
-- **`/app/api/documents/route.ts`**: Document retrieval and filtering
-
-### Key Features
-
-1. **Session Management**: Each document-session combination has isolated chat history
-2. **Cerebras Integration**: Uses the official Cerebras Cloud SDK
-3. **Responsive Design**: Works on desktop and mobile devices
-4. **Error Handling**: Graceful fallbacks and user-friendly error messages
-
-## Database Integration
-
-The application can integrate with your existing document database:
-
-1. **Worker API**: Connect to your Cloudflare Worker API
-2. **Direct Database**: Modify the documents API to query your database directly
-3. **Mock Data**: Falls back to mock data if database is unavailable
-
-## Customization
-
-### Adding New Documents
-
-Update the mock data in `/app/api/documents/route.ts` or connect to your database.
-
-### Styling
-
-The application uses Tailwind CSS. Modify the classes in the components to change the appearance.
-
-### AI Model
-
-Change the model in `/app/api/chat/route.ts`:
-```typescript
-model: 'llama-4-scout-17b-16e-instruct', // Change this
-```
-
-## Troubleshooting
-
-### Common Issues
-
-1. **API Key Error**: Ensure your Cerebras API key is correctly set in `.env.local`
-2. **No Documents**: Check if the documents API is returning data
-3. **Chat Not Working**: Verify the Cerebras API is accessible and the model is available
-
-### Debug Mode
-
-Enable debug logging by adding to your environment:
-```env
-NODE_ENV=development
-```
-
-## Production Deployment
-
-1. **Build the Application**
-   ```bash
-   npm run build
-   ```
-
-2. **Start Production Server**
-   ```bash
-   npm start
-   ```
-
-3. **Environment Variables**: Ensure all environment variables are set in production
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## License
-
-This project is licensed under the MIT License.
+The app is built with Next.js 15 and uses the App Router. All components are client-side with proper TypeScript support and modern React patterns.

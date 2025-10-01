@@ -16,8 +16,17 @@ import {
 	handleAdminUpload,
 	handleAdminCreateTextbook,
 	handleAdminListTextbooks,
-	handleAdminListSections
+	handleAdminListSections,
+	handleAdminMigrateToR2,
+	handleAdminStorageAnalysis,
+	handleAdminOptimizeStorage,
+	handleAdminCleanupOrphaned
 } from "./admin";
+import {
+	handleAISearch,
+	handleAIChat,
+	handlePDFRetrieval
+} from "./ai-search-routes";
 
 export { MyDurableObject };
 
@@ -96,6 +105,42 @@ export default {
 			// Route: GET /admin/textbooks/:slug/sections
 			if (path.startsWith('/admin/textbooks/') && path.endsWith('/sections') && method === 'GET') {
 				return await handleAdminListSections(request, env);
+			}
+
+			// Route: POST /admin/migrate-to-r2
+			if (path === '/admin/migrate-to-r2' && method === 'POST') {
+				return await handleAdminMigrateToR2(request, env);
+			}
+
+			// Route: GET /admin/storage-analysis
+			if (path === '/admin/storage-analysis' && method === 'GET') {
+				return await handleAdminStorageAnalysis(request, env);
+			}
+
+			// Route: POST /admin/optimize-storage
+			if (path === '/admin/optimize-storage' && method === 'POST') {
+				return await handleAdminOptimizeStorage(request, env);
+			}
+
+			// Route: POST /admin/cleanup-orphaned
+			if (path === '/admin/cleanup-orphaned' && method === 'POST') {
+				return await handleAdminCleanupOrphaned(request, env);
+			}
+
+			// AI Search Routes
+			// Route: GET /ai/search?q=query&textbook=slug
+			if (path === '/ai/search' && method === 'GET') {
+				return await handleAISearch(request, env);
+			}
+
+			// Route: POST /ai/chat
+			if (path === '/ai/chat' && method === 'POST') {
+				return await handleAIChat(request, env);
+			}
+
+			// Route: GET /ai/pdf/:resource_id
+			if (path.startsWith('/ai/pdf/') && method === 'GET') {
+				return await handlePDFRetrieval(request, env);
 			}
 
 			// Default route
